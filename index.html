@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>일차부등식</title>
+
+  <!-- MathJax 라이브러리 로드 -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+    defer
+  ></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      background: #f7f9fc;
+      color: #333;
+    }
+    #gameContainer {
+      width: 80%;
+      max-width: 900px;
+      margin: 0 auto;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .centered {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .energyBarContainer {
+      width: 60%;
+      background: #ccc;
+      margin: 10px auto;
+      height: 20px;
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .energyBar {
+      height: 100%;
+      background: linear-gradient(to right, #82c91e, #fddb3a);
+      width: 100%;
+      transition: width 1s linear;
+    }
+    .difficultyBtn {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px 20px;
+      background: #3b5bdb;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .difficultyBtn:hover {
+      background: #4c6ef5;
+    }
+    .optionBtn {
+      display: block;
+      width: 70%;
+      max-width: 400px;
+      margin: 10px auto;
+      padding: 10px;
+      background: #dee2e6;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .optionBtn:hover {
+      background: #ced4da;
+    }
+    #chanceDisplay {
+      font-size: 1.1em;
+      margin: 10px 0;
+    }
+    #totalTime {
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #999;
+    }
+    #scoreDisplay {
+      font-size: 1.2em;
+      margin-top: 5px;
+    }
+    #response {
+      white-space: pre-wrap;
+      margin-top: 10px;
+      text-align: left;
+      color: #333;
+      background: #f2f2f2;
+      padding: 5px;
+      border: 1px solid #ccc;
+      display: inline-block;
+      width: 70%;
+      max-width: 600px;
+      word-break: break-all;
+    }
+    .nameInput {
+      margin: 20px auto;
+      text-align: center;
+    }
+    .nameInput input {
+      padding: 10px;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      width: 200px;
+    }
+    #saveBtn {
+      background: #22b8cf;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      margin-top: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #saveBtn:hover {
+      background: #15aabf;
+    }
+    #startBtn {
+      background: #fd7e14;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      margin-top: 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #startBtn:hover {
+      background: #f76707;
+    }
+    .difficultyContainer {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+<div id="gameContainer">
+
+  <!-- 첫 화면 (이름 입력 및 난이도 선택) -->
+  <div id="introScreen" class="centered">
+    <h1>일차부등식</h1>
+    <div class="nameInput">
+      <label for="playerName">이름을 입력하세요</label><br/>
+      <input type="text" id="playerName" placeholder="이름">
+    </div>
+    <div class="difficultyContainer">
+      <p>난이도를 선택하세요</p>
+      <button class="difficultyBtn" data-time="12" data-score="20">최상 (12초, +20점)</button>
+      <button class="difficultyBtn" data-time="18" data-score="15">상 (18초, +15점)</button>
+      <button class="difficultyBtn" data-time="22" data-score="13">중 (22초, +13점)</button>
+      <button class="difficultyBtn" data-time="0" data-score="10">하 (시간 제한 없음, +10점)</button>
+    </div>
+  </div>
+
+  <!-- 문제 화면 -->
+  <div id="quizScreen" class="hidden">
+    <div class="energyBarContainer">
+      <div class="energyBar" id="energyBar"></div>
+    </div>
+
+    <div id="chanceDisplay"></div>
+    <div id="scoreDisplay"></div>
+    <div id="totalTime"></div>
+    
+    <div id="questionContainer">
+      <div id="questionText"></div>
+      <div id="optionButtons"></div>
+    </div>
+
+  </div>
+
+  <!-- 게임 종료 화면 -->
+  <div id="endScreen" class="hidden centered">
+    <h2>게임 종료</h2>
+    <div id="finalMessage"></div>
+    <button id="sendScoreBtn">점수 전송</button>
+    <div id="response"></div>
+  </div>
+
+</div>
+
+<script>
+/*
+  점수 전송 함수
+*/
+function saveData(game, name, score, elapsedTime) {
+  const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+  const requestData = {
+    game,
+    name,
+    score: parseInt(score, 10),
+    elapsedTime: parseInt(elapsedTime, 10)
+  };
+
+  fetch(FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestData)
+  })
+    .then(response => response.json().then(responseData => {
+      if (response.ok) {
+        document.getElementById('response').innerText =
+          `성공: ${JSON.stringify(responseData, null, 2)}`;
+      } else {
+        document.getElementById('response').innerText =
+          `오류: ${JSON.stringify(responseData, null, 2)}`;
+      }
+    }))
+    .catch(error => {
+      console.error('요청 실패:', error);
+      document.getElementById('response').innerText =
+        `네트워크 오류: ${error.message}`;
+    });
+}
+
+/*
+  문제 리스트 (순서, 보기, 정답 전혀 바꾸지 않음).
+  - 1~16: 2지선다 (일차부등식인지 아닌지)
+  - 19~36, 37~58, 59~62: 4지선다 (다음 일차부등식을 풀어라)
+*/
+const allProblems = [
+  // ---------------------
+  // 1~16 (2지선다)
+  // ---------------------
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(x - 3 \\le 2x + 5\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(x^2 - 3x < 4\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(-x + 3 < 2 - x\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(x^2 - 4 \\ge x^2 + 2x\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(x + 5 > 8\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(7 + 2 > 4\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(3x + 1 \\le 2\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(2x + 3 < 2(x - 1)\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(3x - 8x > 6x\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(2x + 10 = 4\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(x + 8 < 3x + 4\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(x^2 + x \\le x^2\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(-x + 3 < 5 - x\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(5x - 1 > 3x + 7\\)",
+    options: ["○", "×"],
+    correct: 0
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(3x^2 + 2x - 5 \\le 0\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+  {
+    instruction: "다음 중 일차부등식인 것에는 ○표를, 아닌 것에는 x표를 하여라.",
+    question: "\\(2x \\ge 2x + 5\\)",
+    options: ["○", "×"],
+    correct: 1
+  },
+
+  // ---------------------
+  // 19~36 (4지선다)
+  // ---------------------
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(x + 2 > 5\\)",
+    options: ["\\(x > 3\\)", "\\(x \\ge 5\\)", "\\(x \\le 3\\)", "\\(x = 3\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2x \\ge -8\\)",
+    options: ["\\(x \\ge -4\\)", "\\(x \\ge -8\\)", "\\(x > -2\\)", "\\(x \\le -4\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(5 - x \\ge 2 - 4x\\)",
+    options: ["\\(x \\le -1\\)", "\\(x \\ge -1\\)", "\\(x > 1\\)", "\\(x \\le 1\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-8 - 2x > 2x + 4\\)",
+    options: ["\\(x < -3\\)", "\\(x > -3\\)", "\\(x \\le -4\\)", "\\(x \\ge -4\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(4x - 7 > 2x - 6\\)",
+    options: ["\\(x > \\tfrac{1}{2}\\)", "\\(x \\ge -1\\)", "\\(x < \\tfrac{1}{2}\\)", "\\(x \\le 1\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2 - 3x < 14 + 3x\\)",
+    options: ["\\(x < -2\\)", "\\(x > -2\\)", "\\(x \\le -2\\)", "\\(x \\ge -1\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(x - 1 > 2\\)",
+    options: ["\\(x \\le 3\\)", "\\(x > 3\\)", "\\(x \\ge 1\\)", "\\(x < 1\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(x + 3 \\le -1\\)",
+    options: ["\\(x \\le -4\\)", "\\(x < -3\\)", "\\(x > -4\\)", "\\(x \\ge -3\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2x < 10\\)",
+    options: ["\\(x < 5\\)", "\\(x > 5\\)", "\\(x \\ge 0\\)", "\\(x \\le -5\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(7x + 3 \\ge 4x\\)",
+    options: ["\\(x \\ge -1\\)", "\\(x \\le -1\\)", "\\(x > -3\\)", "\\(x = -1\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-4x \\le 20\\)",
+    options: ["\\(x \\ge -5\\)", "\\(x > -5\\)", "\\(x < -5\\)", "\\(x \\le 5\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2x + 3 > 9\\)",
+    options: ["\\(x > 3\\)", "\\(x \\ge 3\\)", "\\(x \\le 3\\)", "\\(x < 2\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3x - 2 < 10\\)",
+    options: ["\\(x < 4\\)", "\\(x \\le 4\\)", "\\(x > 4\\)", "\\(x \\ge 3\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(\\dfrac{x}{3} > 4\\)",
+    options: ["\\(x > 12\\)", "\\(x \\le 12\\)", "\\(x \\ge 0\\)", "\\(x < 0\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-\\dfrac{x}{5} \\ge -3\\)",
+    options: ["\\(x \\le 15\\)", "\\(x \\ge 15\\)", "\\(x < 15\\)", "\\(x = 15\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-x + 7 < 2\\)",
+    options: ["\\(x > 5\\)", "\\(x \\ge 5\\)", "\\(x < -5\\)", "\\(x \\le -5\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2x - 1 \\ge 5x + 2\\)",
+    options: ["\\(x \\le -1\\)", "\\(x \\ge -1\\)", "\\(x < 1\\)", "\\(x > 1\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2x + 4 < x - 3\\)",
+    options: ["\\(x < -7\\)", "\\(x > -7\\)", "\\(x \\le -1\\)", "\\(x \\ge -1\\)"],
+    correct: 0
+  },
+
+  // ---------------------
+  // 37~58 (4지선다)
+  // ---------------------
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(5x + 1 \\le 3x + 7\\)",
+    options: ["\\(x \\le 3\\)", "\\(x > 3\\)", "\\(x \\ge -3\\)", "\\(x = 3\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3x \\ge x + 5\\)",
+    options: [
+      "\\(x \\le \\tfrac{5}{2}\\)",
+      "\\(x \\ge \\tfrac{5}{2}\\)",
+      "\\(x > 5\\)",
+      "\\(x = \\tfrac{5}{2}\\)"
+    ],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-x - 3 > x + 1\\)",
+    options: ["\\(x < -2\\)", "\\(x > -2\\)", "\\(x = -2\\)", "\\(x \\le -3\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-2x + 1 < x - 5\\)",
+    options: ["\\(x \\le 2\\)", "\\(x > 2\\)", "\\(x \\ge -2\\)", "\\(x < -2\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(4x - 3 \\ge 6x + 5\\)",
+    options: ["\\(x \\le -4\\)", "\\(x \\ge -4\\)", "\\(x < 4\\)", "\\(x = -4\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3x + 8 > 5x\\)",
+    options: ["\\(x < 4\\)", "\\(x \\le -4\\)", "\\(x \\ge 4\\)", "\\(x = 0\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(7x - 5 \\ge 5x + 9\\)",
+    options: ["\\(x > 7\\)", "\\(x \\le 7\\)", "\\(x \\ge 7\\)", "\\(x < -7\\)"],
+    correct: 2
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-5x + 7 < x - 5\\)",
+    options: ["\\(x > 2\\)", "\\(x \\ge -2\\)", "\\(x = 2\\)", "\\(x < 2\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(x - 9 \\le 1 - 3x\\)",
+    options: ["\\(x < 2\\)", "\\(x \\le -2\\)", "\\(x \\ge 2\\)", "\\(x = 2\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3 - x > 4x - 7\\)",
+    options: ["\\(x < 2\\)", "\\(x > 2\\)", "\\(x = -2\\)", "\\(x \\le 1\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(9x - 4 \\le 6x + 5\\)",
+    options: ["\\(x < 3\\)", "\\(x \\ge 3\\)", "\\(x \\le 3\\)", "\\(x = -3\\)"],
+    correct: 2
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3x - 8 \\ge 6x + 10\\)",
+    options: ["\\(x \\ge -6\\)", "\\(x \\le -6\\)", "\\(x = -6\\)", "\\(x < 6\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-6x - 5 < x + 2\\)",
+    options: ["\\(x > -1\\)", "\\(x < -1\\)", "\\(x \\le -1\\)", "\\(x = 1\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-2x + 3 \\ge x - 6\\)",
+    options: ["\\(x \\ge 3\\)", "\\(x \\le 3\\)", "\\(x = -3\\)", "\\(x < 0\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(x + 7 \\ge 5x - 9\\)",
+    options: ["\\(x \\le 4\\)", "\\(x \\ge 4\\)", "\\(x < -4\\)", "\\(x = 4\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-2x + 8 \\ge 3x - 2\\)",
+    options: ["\\(x \\le 2\\)", "\\(x > 2\\)", "\\(x = 2\\)", "\\(x \\ge -2\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3x - 6 < 8x + 9\\)",
+    options: ["\\(x > -3\\)", "\\(x < -3\\)", "\\(x \\le -3\\)", "\\(x = 3\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(8x - 3 < 4x + 3\\)",
+    options: [
+      "\\(x > \\tfrac{3}{2}\\)",
+      "\\(x \\ge \\tfrac{3}{2}\\)",
+      "\\(x < \\tfrac{3}{2}\\)",
+      "\\(x = \\tfrac{3}{2}\\)"
+    ],
+    correct: 2
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(14 - 2x \\le 4 + 3x\\)",
+    options: ["\\(x \\le 2\\)", "\\(x \\ge 2\\)", "\\(x > -2\\)", "\\(x < -2\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(3x + 4 > 2x + 3\\)",
+    options: ["\\(x < -1\\)", "\\(x = -1\\)", "\\(x > -1\\)", "\\(x \\le 1\\)"],
+    correct: 2
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(6x - 2 \\le x + 8\\)",
+    options: ["\\(x = 2\\)", "\\(x \\le 2\\)", "\\(x \\ge 2\\)", "\\(x < -2\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(5x + 14 < 9x + 2\\)",
+    options: ["\\(x \\le 3\\)", "\\(x = 3\\)", "\\(x > 3\\)", "\\(x < -3\\)"],
+    correct: 2
+  },
+
+  // ---------------------
+  // 59~62 (4지선다)
+  // ---------------------
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(x + 7 \\ge 5x - 9\\)",
+    options: ["\\(x \\le 4\\)", "\\(x \\ge 4\\)", "\\(x = 4\\)", "\\(x > -4\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(2x - 2 < 5x - 8\\)",
+    options: ["\\(x \\le 2\\)", "\\(x > 2\\)", "\\(x < -2\\)", "\\(x = 2\\)"],
+    correct: 1
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-3x - 2 > -x + 6\\)",
+    options: ["\\(x < -4\\)", "\\(x > -4\\)", "\\(x \\le -4\\)", "\\(x = -4\\)"],
+    correct: 0
+  },
+  {
+    instruction: "다음 일차부등식을 풀어라.",
+    question: "\\(-2x + 8 \\ge 3x - 2\\)",
+    options: ["\\(x \\le 2\\)", "\\(x > 2\\)", "\\(x \\ge -2\\)", "\\(x = 2\\)"],
+    correct: 0
+  }
+];
+
+/*
+  전역 변수들
+*/
+let currentIndex = 0;
+let score = 0;
+let timeLimit = 0;
+let scorePerQuestion = 0;
+let timerId = null;
+let energyWidth = 100;
+let chances = 3;
+let startTime;
+let totalElapsedTime = 0;
+
+/**
+ * 난이도 버튼 클릭
+ */
+document.querySelectorAll('.difficultyBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    timeLimit = parseInt(btn.getAttribute('data-time'), 10);
+    scorePerQuestion = parseInt(btn.getAttribute('data-score'), 10);
+
+    const playerName = document.getElementById("playerName").value.trim();
+    if (!playerName) {
+      alert("이름을 입력해주세요!");
+      return;
+    }
+
+    // 화면 전환
+    document.getElementById("introScreen").classList.add("hidden");
+    document.getElementById("quizScreen").classList.remove("hidden");
+
+    score = 0;
+    currentIndex = 0;
+    chances = 3;
+    energyWidth = 100;
+    document.getElementById("chanceDisplay").innerText = `남은 기회: ${chances}`;
+
+    // 전체 경과 시간 시작
+    startTime = new Date().getTime();
+    updateTotalTime();
+
+    showProblem();
+  });
+});
+
+/**
+ * 문제 표시 (순서대로)
+ */
+function showProblem() {
+  if (currentIndex >= allProblems.length) {
+    // 모든 문제 소진
+    endGame("모든 문제를 풀었습니다!");
+    return;
+  }
+
+  const problem = allProblems[currentIndex];
+  document.getElementById("chanceDisplay").innerText = `남은 기회: ${chances}`;
+  document.getElementById("scoreDisplay").innerText = `점수: ${score}`;
+
+  // 문제 구성
+  const qText = `
+    <p><strong>${problem.instruction}</strong></p>
+    <p>\\(${problem.question}\\)</p>
+  `;
+  document.getElementById("questionText").innerHTML = qText;
+
+  // 보기 표시 (원본 그대로 순서 유지)
+  const optionContainer = document.getElementById("optionButtons");
+  optionContainer.innerHTML = "";
+  for (let i = 0; i < problem.options.length; i++) {
+    const btn = document.createElement("button");
+    btn.className = "optionBtn";
+    btn.innerHTML = problem.options[i];
+    btn.onclick = () => checkAnswer(i);
+    optionContainer.appendChild(btn);
+  }
+
+  // 수식 렌더링
+  MathJax.typeset();
+
+  // 에너지바 타이머
+  if (timeLimit > 0) {
+    energyWidth = 100;
+    document.getElementById("energyBar").style.width = energyWidth + "%";
+    if (timerId) {
+      clearInterval(timerId);
+    }
+    timerId = setInterval(() => {
+      energyWidth -= (100 / timeLimit);
+      if (energyWidth <= 0) {
+        energyWidth = 0;
+        document.getElementById("energyBar").style.width = "0%";
+        clearInterval(timerId);
+
+        // 시간 초과 -> 오답 처리
+        chances--;
+        if (chances <= 0) {
+          endGame("기회를 모두 소진하였습니다.");
+          return;
+        }
+        alert("시간이 초과되었습니다. 기회 1 감소!");
+        currentIndex++;
+        showProblem();
+      } else {
+        document.getElementById("energyBar").style.width = energyWidth + "%";
+      }
+    }, 1000);
+  } else {
+    // 시간 제한 없음
+    document.getElementById("energyBar").style.width = "100%";
+    if (timerId) {
+      clearInterval(timerId);
+    }
+    timerId = null;
+  }
+}
+
+/**
+ * 정답 체크
+ */
+function checkAnswer(choiceIndex) {
+  const problem = allProblems[currentIndex];
+  if (timerId) {
+    clearInterval(timerId);
+  }
+
+  if (choiceIndex === problem.correct) {
+    score += scorePerQuestion;
+    alert("정답입니다!");
+  } else {
+    chances--;
+    alert(`틀렸습니다!\n정답: ${problem.options[problem.correct]}`);
+    if (chances <= 0) {
+      endGame("기회를 모두 소진하였습니다.");
+      return;
+    }
+  }
+
+  currentIndex++;
+  showProblem();
+}
+
+/**
+ * 게임 종료
+ */
+function endGame(message) {
+  if (timerId) {
+    clearInterval(timerId);
+  }
+  const now = new Date().getTime();
+  const elapsed = Math.floor((now - startTime) / 1000);
+  totalElapsedTime = elapsed;
+
+  document.getElementById("quizScreen").classList.add("hidden");
+  document.getElementById("endScreen").classList.remove("hidden");
+
+  document.getElementById("finalMessage").innerText =
+    `${message}\n최종 점수: ${score}\n총 소요 시간: ${elapsed}초`;
+}
+
+/**
+ * 전체 경과 시간 계속 업데이트
+ */
+function updateTotalTime() {
+  const now = new Date().getTime();
+  const elapsed = Math.floor((now - startTime) / 1000);
+  document.getElementById("totalTime").innerText = `전체 경과 시간: ${elapsed}초`;
+  requestAnimationFrame(updateTotalTime);
+}
+
+/**
+ * 점수 전송 버튼
+ */
+document.getElementById("sendScoreBtn").addEventListener("click", () => {
+  const playerName = document.getElementById("playerName").value.trim();
+  saveData("일차부등식", playerName, score, totalElapsedTime);
+});
+</script>
+</body>
+</html>
